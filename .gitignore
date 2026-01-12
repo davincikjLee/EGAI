@@ -1,0 +1,45 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# IDE
+.idea/
+
+# Data files (large)
+data/audio/
+data/*.csv
+*.mp3
+*.wav
+
+# Model files
+models/
+*.h5
+*.keras
+*.pkl
+
+# Cache
+cache/
+*.cache
+spectrogram_cache/
+
+# Logs
+*.log
+logs/
+
+# Experiments outputs
+experiments/*/
+first_sample_spectrograms.png
+
+# Temp files
+nul
+*.tmp
+
+# Reference (논문 등 저작권)
+reference/

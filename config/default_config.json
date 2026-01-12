@@ -1,0 +1,188 @@
+{
+  "crawler_settings": {
+    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/100.0.4896.75 Safari/537.36",
+    "request_delay_sec": 2,
+    "timeout_sec": 30,
+    "max_retries": 3,
+    "retry_delay_sec": 5,
+    "proxy_enabled": false,
+    "proxy_list": [],
+    "use_selenium": true,
+    "selenium_driver_path": null,
+    "use_auto_driver_download": true,
+    "selenium_headless": false,
+    "scroll_load_limit": 5
+  },
+  "urls": {
+    "base_url": "https://certified.hyundai.com",
+    "list_page_pattern": "/p/search/vehicle",
+    "detail_page_pattern": "/p/goods/goodsDetail.do?goodsNo={goods_no}",
+    "next_page_selector": {
+      "type": "xpath",
+      "selector": "//button[@id='btnSeeMore']",
+      "item_check_selector": "//ul[@id='productList']/li[@class='type02']"
+    },
+    "total_count_selector": {
+      "type": "xpath",
+      "selector": "//em[@id='totalVehicleCnt']"
+    },
+    "goods_no_selector": {
+      "type": "xpath",
+      "selector": "//ul[@id='productList']/li[@class='type02']/a",
+      "extract_attribute": "href"
+    },
+    "vr_page_pattern": "/p/goods/goodsDetail.do?goodsNo={goods_no}"
+  },
+  "data_selectors": {
+    "vehicle_name": {
+      "type": "xpath",
+      "selector": "//div[@class='pdp02_price']//div[@class='name']",
+      "extract_method": "text"
+    },
+
+    "base_info_list": {
+      "type": "xpath",
+      "selector": "//div[@class='pdp03_tabs first']//ol[@class='base_01']/li",
+      "extract_method": "list_key_value"
+    },
+
+    "popular_package_applied": {
+      "type": "xpath",
+      "selector": "//div[@class='etc'][./p[@class='tit'][contains(text(),'특이사항')]]/ul/li[contains(., '파퓰러 패키지')]",
+      "extract_method": "exists"
+    },
+    "certified_inspection_passed": {
+      "type": "xpath",
+      "selector": "//div[@class='cont_box base check_report']//p[@class='tit']/em[contains(text(), '인증차량')]",
+      "extract_method": "exists"
+    },
+    "inspection_date": {
+      "type": "xpath",
+      "selector": "//div[@class='cont_box base check_report']//small[contains(text(), '진단일')]",
+      "extract_method": "text",
+      "clean_regex": "진단일\\s*:\\s*"
+    },
+    "oil_filter_changed": {
+      "type": "xpath",
+      "selector": "//div[@class='list_report']//p[@class='name'][contains(text(),'엔진오일')]//following-sibling::p[@class='result'][contains(text(), '교체')]",
+      "extract_method": "exists"
+    },
+    "ac_filter_changed": {
+      "type": "xpath",
+      "selector": "//div[@class='list_report']//p[@class='name'][contains(text(),'에어컨 필터')]//following-sibling::p[@class='result'][contains(text(), '교체')]",
+      "extract_method": "exists"
+    },
+    "wiper_blades_changed": {
+      "type": "xpath",
+      "selector": "//div[@class='list_report']//p[@class='name'][contains(text(),'와이퍼 블레이드')]//following-sibling::p[@class='result'][contains(text(), '교체')]",
+      "extract_method": "exists"
+    },
+    "washer_fluid_replenished": {
+      "type": "xpath",
+      "selector": "//div[@class='list_report']//p[@class='name'][contains(text(),'워셔액')]//following-sibling::p[@class='result'][contains(text(), '보충')]",
+      "extract_method": "exists"
+    },
+    "warranty_remaining_km": {
+      "type": "xpath",
+      "selector": "//div[@class='warranty-container']//p[@class='name'][contains(text(),'차체 및 일반부품')]/following-sibling::p[@class='distance']/span[contains(@class, 'leftOdoBA')]",
+      "extract_method": "text",
+      "clean_regex": "[^0-9]"
+    },
+    "warranty_remaining_months": {
+      "type": "xpath",
+      "selector": "//div[@class='warranty-container']//p[@class='name'][contains(text(),'차체 및 일반부품')]/following-sibling::p[@class='period']/span[contains(@class, 'leftGrnCdtStrBA')]",
+      "extract_method": "text"
+    },
+    "my_car_damage_reported": {
+      "type": "xpath",
+      "selector": "//div[@class='head_box']//th[contains(text(),'내차피해')]/following-sibling::td[1]/span[contains(., '0건')]",
+      "extract_method": "exists",
+      "invert_boolean": true
+    },
+    "owner_changed": {
+      "type": "xpath",
+      "selector": "//div[@class='head_box']//th[contains(text(),'소유자변경')]/following-sibling::td[1]/strong",
+      "extract_method": "count_gt_zero"
+    },
+    "liens_encumbrances_exist": {
+      "type": "xpath",
+      "selector": "//div[@class='history']//strong[contains(text(),'압류/저당')]/following-sibling::ol//span[@class='tit'][contains(text(),'압류')]/following-sibling::span[@class='txt'][contains(text(),'없음')]",
+      "extract_method": "exists",
+      "invert_boolean": true
+    },
+    "jessino": {
+      "type": "xpath",
+      "selector": "//p[@class='uniq_num']",
+      "extract_method": "text",
+      "clean_regex": "제시번호\\s*:\\s*"
+    },
+    "audio_url_on_page": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//audio[@data-ref='audio']/@src",
+        "extract_method": "attribute",
+        "extract_attribute": "src",
+        "is_iframe": false
+    },
+    "fuel_type_filter_gasoline": {
+      "type": "xpath",
+      "selector": "/html/body/div[1]/div[5]/div[1]/div/div[1]/div/section/div[1]/div/ul/li[6]/div/div/input[1]",
+      "id_value": "filter_fuel_0"
+    },
+    "fuel_type_filter_diesel": {
+      "type": "xpath",
+      "selector": "/html/body/div[1]/div[5]/div[1]/div/div[1]/div/section/div[1]/div/ul/li[6]/div/div/input[2]",
+      "id_value": "filter_fuel_1"
+    },
+    "applied_filter_gasoline_word": {
+        "type": "xpath",
+        "selector": "//div[@class='filterword active']//span[contains(., '가솔린')]"
+    },
+    "applied_filter_diesel_word": {
+        "type": "xpath",
+        "selector": "//div[@class='filterword active']//span[contains(., '디젤')]"
+    },
+    "audio_url_on_page": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//audio[@data-ref='audio']/@src",
+        "extract_method": "attribute",
+        "extract_attribute": "src",
+        "is_iframe": false
+    },
+    "overall_score": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='point point_total']//span[@data-ref='enginePointTotal']",
+        "extract_method": "text",
+        "clean_regex": "[^0-9.]"
+    },
+    "mid_freq_score": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='point point1']//span[@data-ref='enginePoint1']",
+        "extract_method": "text",
+        "clean_regex": "[^0-9.]"
+    },
+    "low_high_freq": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='point point2']//span[@data-ref='enginePoint2']",
+        "extract_method": "text",
+        "clean_regex": "[^0-9.]"
+    },
+    "regularity": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='point point4']//span[@data-ref='enginePoint4']",
+        "extract_method": "text",
+        "clean_regex": "[^0-9.]"
+    },
+    "irregularity": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='point point5']//span[@data-ref='enginePoint5']",
+        "extract_method": "text",
+        "clean_regex": "[^0-9.]"
+    },
+    "specific_anomaly": {
+        "type": "xpath",
+        "selector": "//div[@id='experienceCont3']//p[@class='txt stop'][contains(text(),'실제 엔진 소리를 들어보세요')]/following-sibling::p[@class='txt playing'][contains(text(),'엔진 20cm 주변에서 녹음되었습니다.')]",
+        "extract_method": "exists",
+        "invert_boolean": false
+    }
+  }
+}
