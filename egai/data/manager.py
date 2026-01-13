@@ -29,7 +29,7 @@ class DataManager:
         "wiper_blades_changed", "washer_fluid_replenished",
         "warranty_remaining_km", "warranty_remaining_months",
         "my_car_damage_reported", "owner_changed", "liens_encumbrances_exist",
-        "overall_score", "mid_freq_score", "low_high_freq", "audable_range_score",
+        "overall_score", "mid_freq_score", "low_high_freq", "audible_range_score",
         "regularity", "irregularity", "specific_anomaly", "jessino"
     ]
 

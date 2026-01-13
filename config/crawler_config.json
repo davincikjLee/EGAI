@@ -157,7 +157,7 @@
       "extract_method": "text",
       "clean_regex": "[^0-9.]"
     },
-    "audable_range_score": {
+    "audible_range_score": {
       "type": "xpath",
       "selector": "//div[@id='experienceCont3']//p[@class='point point3']//span[@data-ref='enginePoint3']",
       "extract_method": "text",

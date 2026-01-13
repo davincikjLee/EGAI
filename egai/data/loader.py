@@ -28,7 +28,7 @@ class AudioDataLoader:
     TARGET_COLUMNS = [
         "low_high_freq",
         "mid_freq_score",
-        "audable_range_score",
+        "audible_range_score",
         "regularity",
         "irregularity",
     ]
