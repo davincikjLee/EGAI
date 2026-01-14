@@ -205,8 +205,61 @@ class AudioDataLoader:
             return X_full, y
         elif model_type in ["dual", "channel_concat"]:
             return [X_full, X_perc], y
+        elif model_type in ["4channel_cbam", "multihead_cbam"]:
+            # 4채널: Full + Percussive + Diff + Variance
+            X_4ch = self._prepare_4channel(X_full, X_perc)
+            return X_4ch, y
         else:
             return X_full, y
+
+    def _prepare_4channel(
+        self,
+        X_full: np.ndarray,
+        X_perc: np.ndarray,
+    ) -> np.ndarray:
+        """
+        4채널 데이터 준비
+
+        Args:
+            X_full: Full 스펙트로그램 (N, H, W, 1)
+            X_perc: Percussive 스펙트로그램 (N, H, W, 1)
+
+        Returns:
+            4채널 스펙트로그램 (N, H, W, 4)
+        """
+        from scipy.ndimage import uniform_filter
+
+        N = X_full.shape[0]
+        H, W = X_full.shape[1], X_full.shape[2]
+
+        X_4ch = np.zeros((N, H, W, 4), dtype=np.float32)
+
+        for i in range(N):
+            full = X_full[i, :, :, 0]
+            perc = X_perc[i, :, :, 0]
+
+            # Channel 1: Full
+            X_4ch[i, :, :, 0] = full
+
+            # Channel 2: Percussive
+            X_4ch[i, :, :, 1] = perc
+
+            # Channel 3: Difference (시간 변동)
+            diff = np.abs(np.diff(full, axis=1))
+            diff = np.pad(diff, ((0, 0), (0, 1)), mode='edge')
+            if diff.max() > 0:
+                diff = diff / diff.max()
+            X_4ch[i, :, :, 2] = diff
+
+            # Channel 4: Variance (불안정 영역)
+            local_mean = uniform_filter(full, size=(1, 8))
+            local_sq_mean = uniform_filter(full**2, size=(1, 8))
+            variance = np.maximum(local_sq_mean - local_mean**2, 0)
+            if variance.max() > 0:
+                variance = variance / variance.max()
+            X_4ch[i, :, :, 3] = variance
+
+        return X_4ch
 
     def get_splits(
         self,

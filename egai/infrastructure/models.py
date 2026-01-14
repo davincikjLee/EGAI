@@ -106,6 +106,10 @@ class ModelFactory:
             return ModelFactory._build_simple_cnn(input_shape, num_outputs)
         elif model_type == "channel_concat":
             return ModelFactory._build_channel_concat(input_shape, num_outputs)
+        elif model_type == "4channel_cbam":
+            return ModelFactory._build_4channel_cbam(input_shape, num_outputs)
+        elif model_type == "multihead_cbam":
+            return ModelFactory._build_multihead_cbam(input_shape, num_outputs)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -229,6 +233,125 @@ class ModelFactory:
             outputs=outputs,
             name="ChannelConcatCBAM",
         )
+
+    @staticmethod
+    def _build_4channel_cbam(
+        input_shape: tuple, num_outputs: int
+    ) -> Model:
+        """
+        4채널 CNN + CBAM (irregularity/regularity 개선용)
+
+        입력 채널:
+            1. Full Spectrogram - 주파수 특성
+            2. Percussive Spectrogram - 충격음 성분
+            3. Difference Spectrogram - 시간 변동 (급격한 변화)
+            4. Variance Map - 불안정 영역
+
+        input_shape: (128, 128, 4)
+        """
+        inputs = layers.Input(shape=input_shape, name="input_4ch")
+
+        # Conv Block 1 + CBAM
+        x = layers.Conv2D(32, 3, padding="same", activation="relu")(inputs)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam1")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 2 + CBAM
+        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam2")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 3 + CBAM
+        x = layers.Conv2D(128, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam3")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 4 + CBAM
+        x = layers.Conv2D(256, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam4")(x)
+        x = layers.GlobalAveragePooling2D()(x)
+
+        # Dense
+        x = layers.Dense(128, activation="relu")(x)
+        x = layers.Dropout(0.3)(x)
+        x = layers.Dense(64, activation="relu")(x)
+        x = layers.Dropout(0.3)(x)
+
+        outputs = layers.Dense(num_outputs, activation="linear", name="output")(x)
+
+        return Model(inputs=inputs, outputs=outputs, name="4ChannelCBAM")
+
+    @staticmethod
+    def _build_multihead_cbam(
+        input_shape: tuple, num_outputs: int
+    ) -> Model:
+        """
+        Multi-head CNN + CBAM
+
+        공유 백본에서 특징 추출 후, 두 개의 전문화된 헤드로 분기:
+        - Frequency Head: low_high_freq, mid_freq_score, audible_range_score (3개)
+        - Regularity Head: regularity, irregularity (2개)
+
+        4채널 입력 사용:
+            1. Full Spectrogram - 주파수 특성
+            2. Percussive Spectrogram - 충격음 성분
+            3. Difference Spectrogram - 시간 변동
+            4. Variance Map - 불안정 영역
+
+        input_shape: (128, 128, 4)
+        """
+        inputs = layers.Input(shape=input_shape, name="input_4ch")
+
+        # ========== Shared Backbone ==========
+        # Conv Block 1 + CBAM
+        x = layers.Conv2D(32, 3, padding="same", activation="relu")(inputs)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam1")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 2 + CBAM
+        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam2")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 3 + CBAM
+        x = layers.Conv2D(128, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam3")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 4 + CBAM
+        x = layers.Conv2D(256, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam4")(x)
+        shared_features = layers.GlobalAveragePooling2D()(x)
+
+        # ========== Frequency Head (3 outputs) ==========
+        # low_high_freq, mid_freq_score, audible_range_score
+        freq_x = layers.Dense(64, activation="relu", name="freq_dense1")(shared_features)
+        freq_x = layers.Dropout(0.3)(freq_x)
+        freq_x = layers.Dense(32, activation="relu", name="freq_dense2")(freq_x)
+        freq_x = layers.Dropout(0.3)(freq_x)
+        freq_output = layers.Dense(3, activation="linear", name="freq_output")(freq_x)
+
+        # ========== Regularity Head (2 outputs) ==========
+        # regularity, irregularity - 시간 변동 특징을 더 활용
+        reg_x = layers.Dense(64, activation="relu", name="reg_dense1")(shared_features)
+        reg_x = layers.Dropout(0.3)(reg_x)
+        reg_x = layers.Dense(32, activation="relu", name="reg_dense2")(reg_x)
+        reg_x = layers.Dropout(0.3)(reg_x)
+        reg_output = layers.Dense(2, activation="linear", name="reg_output")(reg_x)
+
+        # ========== Concatenate Outputs ==========
+        # 순서: low_high_freq, mid_freq_score, audible_range_score, regularity, irregularity
+        outputs = layers.Concatenate(name="output")([freq_output, reg_output])
+
+        return Model(inputs=inputs, outputs=outputs, name="MultiHeadCBAM")
 
     @staticmethod
     def load(model_path: str) -> Model:

@@ -167,3 +167,100 @@ class AudioPreprocessor:
             percussive_specs.append(percussive_spec)
 
         return np.array(full_specs), np.array(percussive_specs)
+
+    def compute_diff_spectrogram(self, spec: np.ndarray) -> np.ndarray:
+        """
+        Difference Spectrogram - 시간 변동 시각화
+
+        연속 프레임 간 차이를 계산하여 급격한 변화(노킹, 미스파이어)를 강조
+
+        Args:
+            spec: 스펙트로그램 (H, W)
+
+        Returns:
+            diff_spec: 차분 스펙트로그램 (H, W)
+        """
+        # 시간축(axis=1) 차분
+        diff = np.diff(spec, axis=1)
+        diff = np.abs(diff)
+
+        # 마지막 열 패딩 (원본 크기 유지)
+        diff = np.pad(diff, ((0, 0), (0, 1)), mode='edge')
+
+        # 정규화
+        if diff.max() > 0:
+            diff = diff / diff.max()
+
+        return diff
+
+    def compute_variance_map(self, spec: np.ndarray, window: int = 8) -> np.ndarray:
+        """
+        Variance Map - 불안정 영역 강조
+
+        이동 윈도우 분산을 계산하여 시간에 따라 불안정한 영역을 시각화
+
+        Args:
+            spec: 스펙트로그램 (H, W)
+            window: 이동 윈도우 크기
+
+        Returns:
+            variance_map: 분산 맵 (H, W)
+        """
+        from scipy.ndimage import uniform_filter
+
+        # 이동 평균
+        local_mean = uniform_filter(spec, size=(1, window))
+        # 이동 제곱 평균
+        local_sq_mean = uniform_filter(spec**2, size=(1, window))
+        # 분산 = E[X²] - E[X]²
+        variance = local_sq_mean - local_mean**2
+        variance = np.maximum(variance, 0)  # 수치 오류 방지
+
+        # 정규화
+        if variance.max() > 0:
+            variance = variance / variance.max()
+
+        return variance
+
+    def compute_4channel_spectrogram(self, audio: np.ndarray) -> np.ndarray:
+        """
+        4채널 스펙트로그램 생성
+
+        채널 구성:
+            1. Full Spectrogram - 주파수 특성
+            2. Percussive Spectrogram - 충격음 성분
+            3. Difference Spectrogram - 시간 변동 (급격한 변화)
+            4. Variance Map - 불안정 영역
+
+        Args:
+            audio: 오디오 배열
+
+        Returns:
+            4채널 스펙트로그램 (H, W, 4)
+        """
+        # 기존 Full + Percussive
+        full_spec, percussive_spec = self.compute_spectrogram(audio)
+
+        # 신규: Difference + Variance
+        diff_spec = self.compute_diff_spectrogram(full_spec)
+        variance_map = self.compute_variance_map(full_spec)
+
+        # 크기 조정
+        diff_spec = self._resize(diff_spec)
+        variance_map = self._resize(variance_map)
+
+        # 4채널 스택
+        return np.stack([full_spec, percussive_spec, diff_spec, variance_map], axis=-1)
+
+    def process_4channel(self, audio_path: str) -> np.ndarray:
+        """
+        4채널 전처리 파이프라인
+
+        Args:
+            audio_path: 오디오 파일 경로
+
+        Returns:
+            4채널 스펙트로그램 (H, W, 4)
+        """
+        audio = self.load_audio(audio_path)
+        return self.compute_4channel_spectrogram(audio)

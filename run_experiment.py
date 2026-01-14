@@ -26,7 +26,7 @@ def main():
         "--model",
         type=str,
         default="simple_cbam",
-        choices=["simple", "simple_cbam", "channel_concat"],
+        choices=["simple", "simple_cbam", "channel_concat", "4channel_cbam", "multihead_cbam"],
         help="모델 타입 (default: simple_cbam)",
     )
 

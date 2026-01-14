@@ -231,7 +231,11 @@ class TrainingPipeline:
         print(f"[Fold {fold + 1}] Train: {len(y_train)}, Test: {len(y_test)}")
 
         # 모델 생성
-        input_shape = (*self.target_shape, 1)
+        if self.model_type in ["4channel_cbam", "multihead_cbam"]:
+            input_shape = (*self.target_shape, 4)
+        else:
+            input_shape = (*self.target_shape, 1)
+
         model = ModelFactory.create(
             model_type=self.model_type,
             input_shape=input_shape,
