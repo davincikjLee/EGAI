@@ -43,3 +43,23 @@ nul
 
 # Reference (논문 등 저작권)
 reference/
+
+# 차량 데이터 폴더
+HUS*/
+
+# 분석 결과
+analysis/experiments/
+analysis_jsc/
+results/
+
+# 샘플 오디오
+sample/
+
+# 로컬 설정
+configs/
+
+# 생성된 PDF
+*.pdf
+
+# 테스트 스크립트
+test_*.py

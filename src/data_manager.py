@@ -63,15 +63,17 @@ class DataManager:
                     df['data_collected'] = False
                 if 'mp3_downloaded' not in df.columns:
                     df['mp3_downloaded'] = False
+                if 'exclude_reason' not in df.columns:
+                    df['exclude_reason'] = ''
                 return df
 
             except pd.errors.EmptyDataError:
                 # 파일은 있지만 내용이 비어있는 경우 (에러 발생 원인)
                 print(f"  [경고] '{self.goods_nos_csv_path}' 파일이 비어 있어 초기화합니다.")
-                return pd.DataFrame(columns=['goodsNo', 'data_collected', 'mp3_downloaded'])
+                return pd.DataFrame(columns=['goodsNo', 'data_collected', 'mp3_downloaded', 'exclude_reason'])
         else:
             # 파일이 아예 없는 경우
-            return pd.DataFrame(columns=['goodsNo', 'data_collected', 'mp3_downloaded'])
+            return pd.DataFrame(columns=['goodsNo', 'data_collected', 'mp3_downloaded', 'exclude_reason'])
 
     def save_goods_nos_with_status(self, df: pd.DataFrame):
         """
@@ -93,6 +95,8 @@ class DataManager:
             combined_df['data_collected'] = False
         if 'mp3_downloaded' not in combined_df.columns:
             combined_df['mp3_downloaded'] = False
+        if 'exclude_reason' not in combined_df.columns:
+            combined_df['exclude_reason'] = ''
 
         return combined_df
 

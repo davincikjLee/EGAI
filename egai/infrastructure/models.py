@@ -11,6 +11,171 @@ from tensorflow import keras
 from tensorflow.keras import layers, Model
 
 
+class BoundedOutput(layers.Layer):
+    """
+    출력 범위 제한 레이어
+
+    sigmoid를 사용하여 출력을 [min_val, max_val] 범위로 제한
+    output = sigmoid(x) * (max_val - min_val) + min_val
+
+    품질 점수 예측 시 1~5 범위를 벗어나는 문제 해결
+    """
+
+    def __init__(self, min_val: float = 1.0, max_val: float = 5.0, **kwargs):
+        super().__init__(**kwargs)
+        self.min_val = min_val
+        self.max_val = max_val
+
+    def call(self, inputs):
+        # sigmoid로 0~1 범위로 변환 후 스케일링
+        return tf.nn.sigmoid(inputs) * (self.max_val - self.min_val) + self.min_val
+
+    def get_config(self):
+        config = super().get_config()
+        config.update({
+            "min_val": self.min_val,
+            "max_val": self.max_val,
+        })
+        return config
+
+
+class Sampling(layers.Layer):
+    """
+    VAE Sampling Layer (Reparameterization Trick)
+
+    z = z_mean + exp(0.5 * z_log_var) * epsilon
+    epsilon ~ N(0, 1)
+    """
+
+    def call(self, inputs):
+        z_mean, z_log_var = inputs
+        batch = tf.shape(z_mean)[0]
+        dim = tf.shape(z_mean)[1]
+        epsilon = tf.random.normal(shape=(batch, dim))
+        return z_mean + tf.exp(0.5 * z_log_var) * epsilon
+
+
+class VAEModel(Model):
+    """
+    VAE Model with Custom Training Step
+
+    Loss = Reconstruction Loss + β * KL Divergence
+    - Reconstruction: MSE between input and output
+    - KL: Regularization to match latent space to N(0,1)
+    """
+
+    def __init__(self, inputs, outputs, encoder, decoder, beta=0.5, **kwargs):
+        super().__init__(inputs, outputs, **kwargs)
+        self.encoder = encoder
+        self.decoder = decoder
+        self.beta = beta  # KL weight (β-VAE)
+        self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
+        self.reconstruction_loss_tracker = keras.metrics.Mean(name="reconstruction_loss")
+        self.kl_loss_tracker = keras.metrics.Mean(name="kl_loss")
+
+    @property
+    def metrics(self):
+        return [
+            self.total_loss_tracker,
+            self.reconstruction_loss_tracker,
+            self.kl_loss_tracker,
+        ]
+
+    def train_step(self, data):
+        with tf.GradientTape() as tape:
+            z_mean, z_log_var, z = self.encoder(data)
+            reconstruction = self.decoder(z)
+
+            # Reconstruction loss (per-pixel MSE, summed)
+            reconstruction_loss = tf.reduce_mean(
+                tf.reduce_sum(
+                    keras.losses.mse(data, reconstruction),
+                    axis=(1, 2)
+                )
+            )
+
+            # KL Divergence loss
+            kl_loss = -0.5 * tf.reduce_mean(
+                tf.reduce_sum(
+                    1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var),
+                    axis=1
+                )
+            )
+
+            total_loss = reconstruction_loss + self.beta * kl_loss
+
+        grads = tape.gradient(total_loss, self.trainable_weights)
+        self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
+
+        self.total_loss_tracker.update_state(total_loss)
+        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+        self.kl_loss_tracker.update_state(kl_loss)
+
+        return {
+            "loss": self.total_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "kl_loss": self.kl_loss_tracker.result(),
+        }
+
+    def test_step(self, data):
+        z_mean, z_log_var, z = self.encoder(data)
+        reconstruction = self.decoder(z)
+
+        reconstruction_loss = tf.reduce_mean(
+            tf.reduce_sum(
+                keras.losses.mse(data, reconstruction),
+                axis=(1, 2)
+            )
+        )
+        kl_loss = -0.5 * tf.reduce_mean(
+            tf.reduce_sum(
+                1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var),
+                axis=1
+            )
+        )
+        total_loss = reconstruction_loss + self.beta * kl_loss
+
+        self.total_loss_tracker.update_state(total_loss)
+        self.reconstruction_loss_tracker.update_state(reconstruction_loss)
+        self.kl_loss_tracker.update_state(kl_loss)
+
+        return {
+            "loss": self.total_loss_tracker.result(),
+            "reconstruction_loss": self.reconstruction_loss_tracker.result(),
+            "kl_loss": self.kl_loss_tracker.result(),
+        }
+
+    def compute_anomaly_score(self, data):
+        """
+        이상 점수 계산
+
+        score = reconstruction_error + β * kl_divergence
+
+        Args:
+            data: 입력 스펙트로그램 (batch, H, W, C)
+
+        Returns:
+            anomaly_scores: 각 샘플의 이상 점수 (batch,)
+        """
+        z_mean, z_log_var, z = self.encoder(data)
+        reconstruction = self.decoder(z)
+
+        # Per-sample reconstruction error
+        reconstruction_error = tf.reduce_sum(
+            keras.losses.mse(data, reconstruction),
+            axis=(1, 2)
+        )
+
+        # Per-sample KL divergence
+        kl_divergence = -0.5 * tf.reduce_sum(
+            1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var),
+            axis=1
+        )
+
+        anomaly_score = reconstruction_error + self.beta * kl_divergence
+        return anomaly_score
+
+
 class CBAM(layers.Layer):
     """
     CBAM (Convolutional Block Attention Module)
@@ -110,6 +275,10 @@ class ModelFactory:
             return ModelFactory._build_4channel_cbam(input_shape, num_outputs)
         elif model_type == "multihead_cbam":
             return ModelFactory._build_multihead_cbam(input_shape, num_outputs)
+        elif model_type == "autoencoder":
+            return ModelFactory._build_autoencoder(input_shape, num_outputs)
+        elif model_type == "vae":
+            return ModelFactory._build_vae(input_shape, num_outputs)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -155,7 +324,8 @@ class ModelFactory:
         x = layers.Dense(64, activation="relu")(x)
         x = layers.Dropout(0.3)(x)
 
-        outputs = layers.Dense(num_outputs, activation="linear", name="output")(x)
+        x = layers.Dense(num_outputs, activation="linear")(x)
+        outputs = BoundedOutput(min_val=1.0, max_val=5.0, name="output")(x)
 
         return Model(inputs=inputs, outputs=outputs, name="SimpleCBAM")
 
@@ -192,7 +362,8 @@ class ModelFactory:
         x = layers.Dense(64, activation="relu")(x)
         x = layers.Dropout(0.3)(x)
 
-        outputs = layers.Dense(num_outputs, activation="linear", name="output")(x)
+        x = layers.Dense(num_outputs, activation="linear")(x)
+        outputs = BoundedOutput(min_val=1.0, max_val=5.0, name="output")(x)
 
         return Model(inputs=inputs, outputs=outputs, name="SimpleCNN")
 
@@ -226,7 +397,8 @@ class ModelFactory:
         x = layers.Dense(64, activation="relu")(x)
         x = layers.Dropout(0.3)(x)
 
-        outputs = layers.Dense(num_outputs, activation="linear", name="output")(x)
+        x = layers.Dense(num_outputs, activation="linear")(x)
+        outputs = BoundedOutput(min_val=1.0, max_val=5.0, name="output")(x)
 
         return Model(
             inputs=[input_full, input_percussive],
@@ -281,7 +453,8 @@ class ModelFactory:
         x = layers.Dense(64, activation="relu")(x)
         x = layers.Dropout(0.3)(x)
 
-        outputs = layers.Dense(num_outputs, activation="linear", name="output")(x)
+        x = layers.Dense(num_outputs, activation="linear")(x)
+        outputs = BoundedOutput(min_val=1.0, max_val=5.0, name="output")(x)
 
         return Model(inputs=inputs, outputs=outputs, name="4ChannelCBAM")
 
@@ -337,7 +510,8 @@ class ModelFactory:
         freq_x = layers.Dropout(0.3)(freq_x)
         freq_x = layers.Dense(32, activation="relu", name="freq_dense2")(freq_x)
         freq_x = layers.Dropout(0.3)(freq_x)
-        freq_output = layers.Dense(3, activation="linear", name="freq_output")(freq_x)
+        freq_x = layers.Dense(3, activation="linear", name="freq_linear")(freq_x)
+        freq_output = BoundedOutput(min_val=1.0, max_val=5.0, name="freq_output")(freq_x)
 
         # ========== Regularity Head (2 outputs) ==========
         # regularity, irregularity - 시간 변동 특징을 더 활용
@@ -345,7 +519,8 @@ class ModelFactory:
         reg_x = layers.Dropout(0.3)(reg_x)
         reg_x = layers.Dense(32, activation="relu", name="reg_dense2")(reg_x)
         reg_x = layers.Dropout(0.3)(reg_x)
-        reg_output = layers.Dense(2, activation="linear", name="reg_output")(reg_x)
+        reg_x = layers.Dense(2, activation="linear", name="reg_linear")(reg_x)
+        reg_output = BoundedOutput(min_val=1.0, max_val=5.0, name="reg_output")(reg_x)
 
         # ========== Concatenate Outputs ==========
         # 순서: low_high_freq, mid_freq_score, audible_range_score, regularity, irregularity
@@ -354,8 +529,155 @@ class ModelFactory:
         return Model(inputs=inputs, outputs=outputs, name="MultiHeadCBAM")
 
     @staticmethod
+    def _build_autoencoder(
+        input_shape: tuple, num_outputs: int = None
+    ) -> Model:
+        """
+        Autoencoder for Anomaly Detection (OK/NG 판단)
+
+        정상 데이터(4~5점)만으로 학습 후, 재구성 오차로 이상 탐지
+        - 정상: 재구성 오차 낮음 (OK)
+        - 이상: 재구성 오차 높음 (NG - 점검 권장)
+
+        input_shape: (128, 128, 4) - 4채널 스펙트로그램
+        """
+        inputs = layers.Input(shape=input_shape, name="input")
+
+        # ========== Encoder ==========
+        # Block 1: 128x128x4 → 64x64x32
+        x = layers.Conv2D(32, 3, padding="same", activation="relu")(inputs)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Block 2: 64x64x32 → 32x32x64
+        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Block 3: 32x32x64 → 16x16x128
+        x = layers.Conv2D(128, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Block 4: 16x16x128 → 8x8x256
+        x = layers.Conv2D(256, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        encoded = layers.MaxPooling2D(2, name="encoded")(x)
+
+        # Bottleneck: 8x8x256 = 16,384 차원
+
+        # ========== Decoder ==========
+        # Block 4: 8x8x256 → 16x16x128
+        x = layers.Conv2DTranspose(128, 3, strides=2, padding="same", activation="relu")(encoded)
+        x = layers.BatchNormalization()(x)
+
+        # Block 3: 16x16x128 → 32x32x64
+        x = layers.Conv2DTranspose(64, 3, strides=2, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+
+        # Block 2: 32x32x64 → 64x64x32
+        x = layers.Conv2DTranspose(32, 3, strides=2, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+
+        # Block 1: 64x64x32 → 128x128x4
+        decoded = layers.Conv2DTranspose(
+            input_shape[-1], 3, strides=2, padding="same",
+            activation="sigmoid", name="output"
+        )(x)
+
+        return Model(inputs=inputs, outputs=decoded, name="Autoencoder")
+
+    @staticmethod
+    def _build_vae(
+        input_shape: tuple, latent_dim: int = 128
+    ) -> Model:
+        """
+        Variational Autoencoder (VAE) for Anomaly Detection
+
+        정상 데이터만으로 학습 후, 재구성 오차 + KL Divergence로 이상 탐지
+        - 정상: 재구성 오차 낮음, 잠재 공간에서 정규 분포 유사
+        - 이상: 재구성 오차 높음, 잠재 공간에서 벗어남
+
+        input_shape: (128, 128, 4) - 4채널 스펙트로그램
+        latent_dim: 잠재 공간 차원 (기본 128)
+
+        Returns:
+            VAE Model with custom loss
+        """
+        # ========== Encoder ==========
+        encoder_inputs = layers.Input(shape=input_shape, name="encoder_input")
+
+        # Conv Block 1: 128x128x4 → 64x64x32
+        x = layers.Conv2D(32, 3, padding="same", activation="relu")(encoder_inputs)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 2: 64x64x32 → 32x32x64
+        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 3: 32x32x64 → 16x16x128
+        x = layers.Conv2D(128, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 4: 16x16x128 → 8x8x256
+        x = layers.Conv2D(256, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Flatten: 8x8x256 = 16384
+        x = layers.Flatten()(x)
+
+        # VAE: z_mean, z_log_var
+        z_mean = layers.Dense(latent_dim, name="z_mean")(x)
+        z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
+
+        # Sampling layer (reparameterization trick)
+        z = Sampling(name="z")([z_mean, z_log_var])
+
+        encoder = Model(encoder_inputs, [z_mean, z_log_var, z], name="encoder")
+
+        # ========== Decoder ==========
+        latent_inputs = layers.Input(shape=(latent_dim,), name="decoder_input")
+
+        # Dense → reshape to 8x8x256
+        x = layers.Dense(8 * 8 * 256, activation="relu")(latent_inputs)
+        x = layers.Reshape((8, 8, 256))(x)
+
+        # Conv Block 4: 8x8x256 → 16x16x128
+        x = layers.Conv2DTranspose(128, 3, strides=2, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+
+        # Conv Block 3: 16x16x128 → 32x32x64
+        x = layers.Conv2DTranspose(64, 3, strides=2, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+
+        # Conv Block 2: 32x32x64 → 64x64x32
+        x = layers.Conv2DTranspose(32, 3, strides=2, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+
+        # Conv Block 1: 64x64x32 → 128x128x4
+        decoder_outputs = layers.Conv2DTranspose(
+            input_shape[-1], 3, strides=2, padding="same",
+            activation="sigmoid", name="decoder_output"
+        )(x)
+
+        decoder = Model(latent_inputs, decoder_outputs, name="decoder")
+
+        # ========== VAE Model ==========
+        outputs = decoder(encoder(encoder_inputs)[2])
+        vae = VAEModel(encoder_inputs, outputs, encoder, decoder, name="VAE")
+
+        return vae
+
+    @staticmethod
     def load(model_path: str) -> Model:
         """저장된 모델 로드"""
         return keras.models.load_model(
-            model_path, custom_objects={"CBAM": CBAM}
+            model_path, custom_objects={
+                "CBAM": CBAM,
+                "BoundedOutput": BoundedOutput,
+            }
         )

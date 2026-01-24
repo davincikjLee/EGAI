@@ -311,8 +311,8 @@ class MainCrawler:
 
                     # goods_nos.csv에 저장 (중복 방지 및 상태 초기화)
                     if newly_discovered_goods_nos:
-                        # 기존 DataFrame에 새로 발견된 goodsNo 추가 (data_collected=False, mp3_downloaded=False)
-                        new_goods_nos_list = [{'goodsNo': gn, 'data_collected': False, 'mp3_downloaded': False} for gn
+                        # 기존 DataFrame에 새로 발견된 goodsNo 추가 (data_collected=False, mp3_downloaded=False, exclude_reason='')
+                        new_goods_nos_list = [{'goodsNo': gn, 'data_collected': False, 'mp3_downloaded': False, 'exclude_reason': ''} for gn
                                               in newly_discovered_goods_nos]
                         goods_nos_df = self.data_manager.add_new_goods_nos_to_df(goods_nos_df, new_goods_nos_list)
                         self.data_manager.save_goods_nos_with_status(goods_nos_df)  # 전체 DataFrame 저장
@@ -345,7 +345,7 @@ class MainCrawler:
                     print(f"  [정적] {len(found_goods_nos_on_page)}개의 goodsNo 발견.")
                     all_found_goods_nos_set.update(found_goods_nos_on_page)
                     # 정적 크롤링 시에도 goods_nos_df 업데이트 및 저장
-                    new_goods_nos_list = [{'goodsNo': gn, 'data_collected': False, 'mp3_downloaded': False} for gn in
+                    new_goods_nos_list = [{'goodsNo': gn, 'data_collected': False, 'mp3_downloaded': False, 'exclude_reason': ''} for gn in
                                           found_goods_nos_on_page if gn not in existing_goods_nos_set]
                     if new_goods_nos_list:
                         goods_nos_df = self.data_manager.add_new_goods_nos_to_df(goods_nos_df, new_goods_nos_list)
@@ -366,11 +366,18 @@ class MainCrawler:
         # --- 상세 페이지 크롤링 루프 시작 ---
         print("\n--- 상세 페이지 크롤링 및 데이터 수집 시작 ---")
 
-        # goods_nos.csv에서 처리되지 않은 goodsNo만 가져오기
+        # goods_nos.csv에서 처리되지 않은 goodsNo만 가져오기 (exclude_reason이 있는 것은 제외)
         goods_nos_to_process_df = self.data_manager.load_goods_nos_with_status()
+
+        # exclude_reason 컬럼이 없으면 추가
+        if 'exclude_reason' not in goods_nos_to_process_df.columns:
+            goods_nos_to_process_df['exclude_reason'] = ''
+
+        # exclude_reason이 비어있고, 아직 처리되지 않은 것만 선택
         unprocessed_goods_nos = goods_nos_to_process_df[
-            (goods_nos_to_process_df['data_collected'] == False) |
-            (goods_nos_to_process_df['mp3_downloaded'] == False)
+            ((goods_nos_to_process_df['data_collected'] == False) |
+             (goods_nos_to_process_df['mp3_downloaded'] == False)) &
+            (goods_nos_to_process_df['exclude_reason'].fillna('') == '')
             ]['goodsNo'].tolist()
 
         if not unprocessed_goods_nos:

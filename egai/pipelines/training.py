@@ -55,7 +55,7 @@ class TrainingPipeline:
         self.target_shape = config.get("target_shape", (128, 128))
         self.fmax = config.get("fmax", 6000)
         self.use_cache = config.get("use_cache", True)
-        self.fuel_type = config.get("fuel_type", "가솔린")
+        self.fuel_type = config.get("fuel_type", None)  # None이면 전체 데이터 사용
 
         # 컴포넌트 초기화
         self.loader: Optional[AudioDataLoader] = None
