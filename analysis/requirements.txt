@@ -7,6 +7,7 @@ scipy==1.10.1
 
 # 오디오 처리
 librosa==0.10.1          # 음성 신호 처리의 핵심
+imageio-ffmpeg           # M4A 파일 지원 (FFmpeg 자동 설치)
 
 # 데이터 처리
 pandas==1.5.3
