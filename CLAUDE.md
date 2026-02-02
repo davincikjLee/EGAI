@@ -6,13 +6,36 @@
 
 ---
 
-## 현재 진행 상황 (2026-01-24)
+## 현재 진행 상황 (2026-02-02)
+
+### 3개 모델 시스템 완성 (2026-02-02)
+
+| 모델 | 목적 | 성능 | 상태 |
+|------|------|------|------|
+| **Regression** | 품질 점수 예측 (5개) | MAE 0.35 | ✅ 완료 |
+| **Binary** | 가솔린/디젤 분류 | F1 0.68, AUC 0.95 | ✅ 완료 |
+| **VAE** | 이상 탐지 | Score 154.66 | ✅ 완료 |
+
+### 통합 XAI 시각화 완성 (2026-02-02)
+
+3개 모델의 분석 결과를 한 이미지로 시각화하는 기능 구현:
+- Regression/Binary: Grad-CAM (주목 영역)
+- VAE: Reconstruction Error (이상 영역)
+- 상세: [고객 기술 보고서](docs/CUSTOMER_TECHNICAL_REPORT_20260202.md)
+
+### NG 데이터 요구량 분석
+
+| 목적 | 최소 | 권장 | 이상적 |
+|------|------|------|--------|
+| VAE 임계값 검증 | 100개 | 200개 | 500개 |
+| OK/NG 분류 학습 | 200개 | 400개 | 800개 |
+
+**현재 상태**: NG 데이터 없음 → 의뢰자 수집 요청 중
 
 ### 데이터 현황
 
-- **전체 데이터**: 2,484개 (가솔린 + 디젤)
-- **유효 데이터**: 2,478개 (손상된 오디오 제외)
-- **학습 데이터**: ~1,900개 (5-Fold CV 기준)
+- **전체 데이터**: 2,605개 (가솔린 2,402 + 디젤 197)
+- **유효 데이터**: 2,599개 (손상된 오디오 제외)
 - **저장 위치**: `data/vehicle_assets/`, `data/car_audio_metadata.csv`
 
 ### 데이터 품질 관리 (2026-01-23)
@@ -213,9 +236,54 @@ py -3.12 scripts/predict.py 엔진소리.m4a
 
 # 폴더 내 모든 파일 분석
 py -3.12 scripts/predict.py sample/
+
+# Grad-CAM 시각화 포함 (XAI)
+py -3.12 scripts/predict.py 엔진소리.m4a --visualize
 ```
 
 > M4A 지원을 위해 `imageio-ffmpeg` 패키지가 자동으로 FFmpeg를 제공합니다.
+
+### Grad-CAM 시각화 (설명가능한 AI)
+
+CNN 모델이 스펙트로그램의 어떤 영역을 보고 판단했는지 시각화합니다.
+
+```bash
+# 단일 파일 시각화
+py -3.12 scripts/visualize_gradcam.py sample/제네시스_엔진음.m4a
+
+# 여러 파일 비교 시각화
+py -3.12 scripts/visualize_gradcam.py sample/ --compare
+```
+
+**출력**: `{파일명}.gradcam.png` 이미지 생성
+
+**구성**:
+
+- 원본 스펙트로그램 (입력)
+- Grad-CAM 히트맵 (모델 주목 영역)
+- 오버레이 (빨간색 = 중요, 파란색 = 덜 중요)
+
+### 통합 XAI 시각화 (3개 모델)
+
+3개 모델(Regression, Binary Classification, VAE)의 분석 결과를 하나의 이미지로 시각화합니다.
+
+```bash
+# 단일 파일 통합 시각화
+py -3.12 scripts/visualize_unified.py sample/엔진소리.m4a
+
+# 폴더 내 모든 파일
+py -3.12 scripts/visualize_unified.py sample/
+
+# 보고서 생성 없이
+py -3.12 scripts/visualize_unified.py sample/엔진소리.m4a --no-report
+```
+
+**출력**: `{파일명}.unified_gradcam.png` + `{파일명}.unified_gradcam.md`
+
+**구성** (각 행별 3개 패널):
+- **Regression**: 품질 점수 예측 시 주목하는 영역 (Grad-CAM)
+- **Binary**: 가솔린/디젤 분류 시 주목하는 영역 (Grad-CAM)
+- **VAE**: 원본 → 재구성 → 오차 맵 (Reconstruction Error)
 
 **출력 예시**:
 ```
@@ -275,6 +343,54 @@ py -3.12 scripts/train_anomaly.py --epochs 50 --beta 0.5
 
 ## 문서
 
-- `doc/PROJECT_OVERVIEW.md`: 프로젝트 전체 개요
+### 고객용 문서
+
+- [docs/CUSTOMER_TECHNICAL_REPORT_20260202.md](docs/CUSTOMER_TECHNICAL_REPORT_20260202.md): **고객 기술 보고서** (모델 구조, NG 데이터 요구량)
+
+### 기술 문서
+
+- `doc/research/SAMPLE_TEST_REPORT.md`: 샘플 테스트 결과
 - `doc/CRAWLER_MODULE.md`: 크롤러 모듈 상세
-- `doc/ANALYSIS_MODULE.md`: AI 분석 모듈 상세
+- `doc/PROJECT_RESPONSE_REPORT.md`: 요구사항 대응 보고서
+
+### 실험 보고서
+
+- `docs/04-report/features/gasoline-diesel-classification.report.md`: 가솔린/디젤 분류 실험
+
+---
+
+## AIL/HIL 설정
+
+> 참조: Obsidian `[[60_Tools/AIL_HIL_Framework]]`
+
+| 설정 | 값 | 비고 |
+|------|-----|------|
+| **bkit 적용** | 부분 | API/웹 인터페이스만 |
+| **AIL 등급** | L1 (Supervised) | 외부 계약, 신뢰 구축 필요 |
+| **연속 정확** | 0 | 초기화 |
+
+### 영역별 도구
+
+| 영역 | 도구 | bkit |
+|------|------|------|
+| 모델 학습 | MLflow, TensorBoard | ❌ |
+| 데이터 파이프라인 | 크롤러, librosa | ❌ |
+| API 서버 | FastAPI (예정) | ✅ /dynamic |
+| 웹 대시보드 | Next.js (예정) | ✅ /dynamic |
+
+### HIL 필수 트리거
+
+- [ ] Gap 분석 < 80%
+- [ ] 모델 성능 변경 (MAE, 정확도)
+- [ ] 의뢰자 피드백 반영
+- [ ] 배포/프로덕션 변경
+
+### AIL 성과 기록
+
+| 날짜 | Check 결과 | HIL 개입 | 비고 |
+|------|-----------|---------|------|
+| 2026-02-02 | 3개 모델 완성 | - | Binary 추가, 통합 XAI |
+
+---
+
+*최종 수정: 2026-02-02 (3개 모델 시스템 + 통합 XAI 완성)*

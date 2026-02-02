@@ -60,6 +60,11 @@ def main():
         "--name", type=str, default=None,
         help="실험 이름"
     )
+    parser.add_argument(
+        "--fuel-type", type=str, default=None,
+        choices=["gasoline", "diesel", None],
+        help="연료 타입 필터 (gasoline/diesel, 기본: None=전체)"
+    )
 
     args = parser.parse_args()
 
@@ -74,9 +79,16 @@ def main():
         "target_shape": (128, 128),
         "fmax": 6000,
         "use_cache": True,
-        "fuel_type": None,  # 전체 데이터 사용 (가솔린 + 디젤)
+        "fuel_type": args.fuel_type,  # None=전체, "gasoline", "diesel"
         "validation_split": 0.2,
     }
+
+    # 연료 타입 한글 변환
+    fuel_type_kr = {
+        None: "전체 (가솔린 + 디젤)",
+        "gasoline": "가솔린만",
+        "diesel": "디젤만",
+    }.get(args.fuel_type, args.fuel_type)
 
     print("=" * 60)
     print("EGAI 이상탐지 VAE 모델 학습")
@@ -88,6 +100,7 @@ def main():
     print(f"  β (KL Weight): {args.beta}")
     print(f"  Latent Dim: {args.latent_dim}")
     print(f"  Min Score: {args.min_score}")
+    print(f"  Fuel Type: {fuel_type_kr}")
     print(f"  Data Dir: {args.data_dir}")
 
     # 파이프라인 실행

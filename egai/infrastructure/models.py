@@ -279,6 +279,8 @@ class ModelFactory:
             return ModelFactory._build_autoencoder(input_shape, num_outputs)
         elif model_type == "vae":
             return ModelFactory._build_vae(input_shape, num_outputs)
+        elif model_type == "binary_cbam":
+            return ModelFactory._build_binary_cbam(input_shape)
         else:
             raise ValueError(f"Unknown model type: {model_type}")
 
@@ -671,6 +673,56 @@ class ModelFactory:
         vae = VAEModel(encoder_inputs, outputs, encoder, decoder, name="VAE")
 
         return vae
+
+    @staticmethod
+    def _build_binary_cbam(
+        input_shape: tuple,
+    ) -> Model:
+        """
+        Binary Classification CNN + CBAM (OK/NG 분류)
+
+        가솔린/디젤 분류 또는 정상/이상 분류용 이진 분류 모델
+        4채널 스펙트로그램 입력, 이진 출력 (sigmoid)
+
+        input_shape: (128, 128, 4)
+        output: 1 (0=OK/가솔린, 1=NG/디젤)
+        """
+        inputs = layers.Input(shape=input_shape, name="input_4ch")
+
+        # Conv Block 1 + CBAM
+        x = layers.Conv2D(32, 3, padding="same", activation="relu")(inputs)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam1")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 2 + CBAM
+        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam2")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 3 + CBAM
+        x = layers.Conv2D(128, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam3")(x)
+        x = layers.MaxPooling2D(2)(x)
+
+        # Conv Block 4 + CBAM
+        x = layers.Conv2D(256, 3, padding="same", activation="relu")(x)
+        x = layers.BatchNormalization()(x)
+        x = CBAM(reduction_ratio=8, name="cbam4")(x)
+        x = layers.GlobalAveragePooling2D()(x)
+
+        # Dense
+        x = layers.Dense(128, activation="relu")(x)
+        x = layers.Dropout(0.3)(x)
+        x = layers.Dense(64, activation="relu")(x)
+        x = layers.Dropout(0.3)(x)
+
+        # Binary output (sigmoid)
+        outputs = layers.Dense(1, activation="sigmoid", name="output")(x)
+
+        return Model(inputs=inputs, outputs=outputs, name="BinaryCBAM")
 
     @staticmethod
     def load(model_path: str) -> Model:

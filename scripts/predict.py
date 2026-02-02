@@ -7,13 +7,16 @@ MP3 또는 M4A 엔진 오디오 파일을 분석하여 품질 점수를 예측�
     py -3.12 scripts/predict.py 파일경로.mp3
     py -3.12 scripts/predict.py 파일경로.m4a
     py -3.12 scripts/predict.py sample/     # 폴더 내 모든 파일
+    py -3.12 scripts/predict.py 파일.m4a --visualize  # Grad-CAM 시각화 포함
 
 예시:
     py -3.12 scripts/predict.py sample/제네시스_엔진음.m4a
+    py -3.12 scripts/predict.py sample/제네시스_엔진음.m4a --visualize
 """
 
 import os
 import sys
+import argparse
 from pathlib import Path
 
 # 프로젝트 루트 추가
@@ -42,7 +45,7 @@ def print_result_box(title: str, content: dict):
     print("=" * 50)
 
 
-def predict_single_file(audio_path: Path):
+def predict_single_file(audio_path: Path, visualize: bool = False):
     """단일 파일 예측"""
     import numpy as np
     import librosa
@@ -136,6 +139,26 @@ def predict_single_file(audio_path: Path):
         "VAE 점수": f"{vae_score:.1f} (낮을수록 정상)",
     })
 
+    # Grad-CAM 시각화 (옵션)
+    if visualize:
+        print("\n[Grad-CAM] 시각화 생성 중...")
+        try:
+            from egai.visualization.gradcam import create_gradcam_for_regression_model
+
+            gradcam = create_gradcam_for_regression_model(str(model_path))
+            heatmap = gradcam.compute_heatmap(x, class_idx=0)
+
+            output_path = audio_path.with_suffix('.gradcam.png')
+            gradcam.visualize(
+                spectrogram,
+                heatmap,
+                output_path=str(output_path),
+                title=f"Grad-CAM: {audio_path.name}",
+            )
+            print(f"[Grad-CAM] 저장 완료: {output_path}")
+        except Exception as e:
+            print(f"[Grad-CAM] 오류: {e}")
+
     return {
         "file": audio_path.name,
         "overall": float(overall),
@@ -145,7 +168,7 @@ def predict_single_file(audio_path: Path):
     }
 
 
-def predict_directory(dir_path: Path):
+def predict_directory(dir_path: Path, visualize: bool = False):
     """디렉토리 내 모든 오디오 파일 예측"""
     audio_files = list(dir_path.glob("*.mp3")) + list(dir_path.glob("*.m4a"))
     audio_files = sorted(audio_files)
@@ -158,7 +181,7 @@ def predict_directory(dir_path: Path):
 
     results = []
     for audio_path in audio_files:
-        result = predict_single_file(audio_path)
+        result = predict_single_file(audio_path, visualize=visualize)
         if result:
             results.append(result)
 
@@ -184,12 +207,25 @@ def predict_directory(dir_path: Path):
 
 
 def main():
-    if len(sys.argv) < 2:
-        print(__doc__)
-        print("\n사용법: py -3.12 scripts/predict.py <파일경로 또는 폴더경로>")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(
+        description="EGAI 엔진 품질 분석",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__
+    )
+    parser.add_argument(
+        "input",
+        type=str,
+        help="오디오 파일 또는 폴더 경로"
+    )
+    parser.add_argument(
+        "--visualize", "-v",
+        action="store_true",
+        help="Grad-CAM 시각화 이미지 생성"
+    )
 
-    input_path = Path(sys.argv[1])
+    args = parser.parse_args()
+
+    input_path = Path(args.input)
 
     # 상대 경로면 프로젝트 루트 기준으로 변환
     if not input_path.is_absolute():
@@ -200,9 +236,9 @@ def main():
     print("=" * 50)
 
     if input_path.is_dir():
-        predict_directory(input_path)
+        predict_directory(input_path, visualize=args.visualize)
     elif input_path.is_file():
-        predict_single_file(input_path)
+        predict_single_file(input_path, visualize=args.visualize)
     else:
         print(f"오류: {input_path}를 찾을 수 없습니다.")
         sys.exit(1)

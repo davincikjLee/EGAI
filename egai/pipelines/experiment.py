@@ -101,7 +101,15 @@ class ExperimentTracker:
         }
         self.current_experiment["fold_results"].append(result)
 
-        print(f"[Experiment] Fold {fold + 1}: MAE={metrics.get('MAE', 'N/A'):.4f}")
+        # MAE 또는 F1 출력 (이진 분류 호환)
+        mae = metrics.get('MAE')
+        f1 = metrics.get('f1')
+        if mae is not None:
+            print(f"[Experiment] Fold {fold + 1}: MAE={mae:.4f}")
+        elif f1 is not None:
+            print(f"[Experiment] Fold {fold + 1}: F1={f1:.4f}")
+        else:
+            print(f"[Experiment] Fold {fold + 1}: 완료")
 
     def log_metric(self, name: str, value: float):
         """단일 메트릭 기록"""

@@ -48,6 +48,13 @@ reference/
 HUS*/
 
 # 분석 결과
+sample/*.png
+sample/*.md
+
+# bkit 자동 생성 파일
+docs/.bkit-memory.json
+docs/.pdca-status.json
+docs/.pdca-snapshots/
 analysis/experiments/
 analysis_jsc/
 results/

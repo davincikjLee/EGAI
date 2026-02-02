@@ -87,8 +87,14 @@ class AudioDataLoader:
         valid_mask = self.metadata["overall_score"] > 0
 
         if fuel_type:
-            valid_mask = valid_mask & (self.metadata["fuel_type"] == fuel_type)
-            print(f"[Loader] 연료 타입 필터: {fuel_type}")
+            # 영어 → 한글 매핑
+            fuel_type_map = {
+                "gasoline": "가솔린",
+                "diesel": "디젤",
+            }
+            fuel_type_kr = fuel_type_map.get(fuel_type, fuel_type)
+            valid_mask = valid_mask & (self.metadata["fuel_type"] == fuel_type_kr)
+            print(f"[Loader] 연료 타입 필터: {fuel_type} → {fuel_type_kr}")
 
         # 오디오 파일 존재 확인
         valid_files = []
