@@ -47,10 +47,6 @@ reference/
 # 차량 데이터 폴더
 HUS*/
 
-# 분석 결과
-sample/*.png
-sample/*.md
-
 # bkit 자동 생성 파일
 docs/.bkit-memory.json
 docs/.pdca-status.json
@@ -59,8 +55,11 @@ analysis/experiments/
 analysis_jsc/
 results/
 
-# 샘플 오디오
-sample/
+# 샘플 오디오 (예시 제외)
+sample/*
+!sample/genesis_sample.wav
+!sample/genesis_sample.unified_gradcam.png
+!sample/genesis_sample.unified_gradcam.md
 
 # 로컬 설정
 configs/
